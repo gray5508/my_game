@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080e20" />
+    <title>PULSEBOX · 体感节奏拳击</title>
+    <meta
+      name="description"
+      content="跟着节拍挥拳，击中左右来袭的音符。浏览器内骨架识别与 3D 动效。"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark"><span></span><span></span><span></span></div>
+          <div>
+            <strong>PULSE<span>BOX</span></strong
+            ><small>MOTION ARCADE / 体感实验室</small>
+          </div>
+        </div>
+        <div class="top-right">
+          <span class="edition">VOL. 01 &nbsp; / &nbsp; NEON DRIFT</span
+          ><span class="top-dot"></span><span>本地识别 · 无需上传画面</span>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="arena-wrap">
+          <div class="arena-heading">
+            <div>
+              <span class="eyebrow">01 / INTERACTIVE TRACK</span>
+              <h1>跟上节拍，<em>打出你的光。</em></h1>
+              <p>左右音符滑入光圈时，朝对应方向挥拳。</p>
+            </div>
+            <div class="track-label">
+              <span>♪</span>
+              <div>
+                <strong>霓虹脉冲</strong><small>108 BPM · 约 18 秒</small>
+              </div>
+            </div>
+          </div>
+          <div class="arena" id="arena">
+            <div class="arena-noise"></div>
+            <div class="arena-grid"></div>
+            <div class="arena-topline">
+              <span
+                ><i class="live-dot"></i>
+                <span id="trackingState">等待动作信号</span></span
+              ><span>STAGE 01 <b> / </b> PULSEBOX</span>
+            </div>
+            <div class="lane-label lane-left"><span>←</span> 左拳区域</div>
+            <div class="lane-label lane-right">右拳区域 <span>→</span></div>
+            <div class="score-pop" id="scorePop" aria-live="polite"></div>
+            <div class="countdown" id="countdown"></div>
+            <div class="start-overlay" id="startOverlay">
+              <div class="overlay-icon">✦</div>
+              <span class="eyebrow">READY WHEN YOU ARE</span>
+              <h2 id="overlayTitle">准备好进入节奏了吗？</h2>
+              <p id="overlayText">
+                接入摄像头让 3D 小人跟随你的动作，或者用 A / L 键先试玩。
+              </p>
+              <button class="primary overlay-button" id="overlayStart">
+                开始演奏 <span>↗</span>
+              </button>
+              <small>浏览器会在你点击开启摄像头后请求权限</small>
+            </div>
+            <div class="camera-preview" id="cameraPreview">
+              <video id="cameraVideo" autoplay muted playsinline></video
+              ><canvas id="cameraCanvas"></canvas><span>LIVE CAM</span>
+            </div>
+            <div class="arena-bottomline">
+              <span>LEFT <b>← A</b></span>
+              <div class="song-progress"><span id="progressFill"></span></div>
+              <span><b>L →</b> RIGHT</span>
+            </div>
+          </div>
+          <div class="hint-strip">
+            <span class="hint-icon">✳</span
+            ><span
+              >让肩膀和双手进入画面。音符到达光圈的一刻出拳；无需摄像头也可用
+              <kbd>A</kbd> / <kbd>L</kbd> 练习。</span
+            >
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="panel-heading">
+            <span class="eyebrow">CONTROL ROOM</span>
+            <h2>游戏控制台<span>↗</span></h2>
+            <p>调整感应，找到你的节奏。</p>
+          </div>
+          <div class="stats">
+            <div class="stat large">
+              <small>SCORE / 得分</small><strong id="score">00000</strong>
+            </div>
+            <div class="stat">
+              <small>COMBO / 连击</small
+              ><strong id="combo">0<span>×</span></strong>
+            </div>
+            <div class="stat">
+              <small>ACCURACY / 命中率</small
+              ><strong id="accuracy">100<span>%</span></strong>
+            </div>
+          </div>
+          <div class="separator"></div>
+          <div class="control-group">
+            <label for="cameraSelect">摄像头设备 <span>CAMERA</span></label
+            ><select id="cameraSelect">
+              <option value="">默认摄像头</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="fpsSelect">追踪帧率 <span>TRACKING FPS</span></label
+            ><select id="fpsSelect">
+              <option value="15">15 FPS · 省电</option>
+              <option value="24" selected>24 FPS · 标准</option>
+              <option value="30">30 FPS · 流畅</option>
+            </select>
+          </div>
+          <div class="control-group range-group">
+            <label for="smoothRange"
+              >骨架平滑 <span id="smoothValue">110 ms</span></label
+            ><input
+              id="smoothRange"
+              type="range"
+              min="50"
+              max="240"
+              step="10"
+              value="110"
+            />
+            <div class="range-ends"><span>灵敏</span><span>稳定</span></div>
+          </div>
+          <div class="control-group range-group">
+            <label for="speedRange"
+              >出拳灵敏度 <span id="speedValue">标准</span></label
+            ><input
+              id="speedRange"
+              type="range"
+              min="45"
+              max="130"
+              step="5"
+              value="75"
+            />
+            <div class="range-ends"><span>轻拳</span><span>重拳</span></div>
+          </div>
+          <div class="separator"></div>
+          <button class="camera-button" id="cameraButton">
+            <span class="camera-button-icon">◉</span
+            ><span>开启摄像头<small>接入骨架追踪</small></span
+            ><b>→</b>
+          </button>
+          <button class="primary play-button" id="startButton">
+            开始演奏 <span>▶</span>
+          </button>
+          <button class="mute-button" id="muteButton" aria-pressed="false">
+            ♫ &nbsp; 音乐开启
+          </button>
+          <div class="panel-note">
+            <span>⌁</span>
+            <p id="statusText">
+              小人现在是待机动画。连接摄像头后，你的骨架会实时驱动它。
+            </p>
+          </div>
+        </aside>
+      </main>
+      <footer>
+        <span>DESIGNED FOR MOVEMENT</span
+        ><span>POSE → SMOOTH → PUNCH → RHYTHM</span
+        ><span>© PULSEBOX / LOCAL PLAY</span>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
