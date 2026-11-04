@@ -51,6 +51,7 @@ export class Stage {
   pose: Point[] = [];
   poseAt = 0;
   targets = { L: { x: -1.4, y: HIT_Y }, R: { x: 1.4, y: HIT_Y } };
+  hitPulse = { L: 0, R: 0 };
   playing = false;
   noteGlyph = noteTexture();
   host: HTMLElement;
@@ -134,6 +135,7 @@ export class Stage {
     }
 
     this.makeRig();
+    this.rig.visible = false;
     this.pads = { L: this.makePad("L"), R: this.makePad("R") };
     this.makeRails();
     new ResizeObserver(() => this.resize()).observe(host);
@@ -399,15 +401,20 @@ export class Stage {
   }
 
   hit(side: "L" | "R", impact?: { x: number; y: number }, scored = true) {
-    const x = impact?.x ?? this.targets[side].x;
-    const y = impact?.y ?? this.targets[side].y;
+    const x = scored
+      ? this.targets[side].x
+      : (impact?.x ?? this.targets[side].x);
+    const y = scored
+      ? this.targets[side].y
+      : (impact?.y ?? this.targets[side].y);
+    if (scored) this.hitPulse[side] = 1;
     const color = scored ? (side === "L" ? CYAN : PINK) : 0x8fa3c7;
     for (let i = 0; i < (scored ? 22 : 7); i++) {
       const mesh = new THREE.Mesh(
         new THREE.IcosahedronGeometry(0.055 + Math.random() * 0.075, 0),
         new THREE.MeshBasicMaterial({ color, transparent: true }),
       );
-      mesh.position.set(x, y, 0);
+      mesh.position.set(x, y, scored ? PAD_Z : 0);
       this.scene.add(mesh);
       const angle = Math.random() * Math.PI * 2;
       const speed = 2 + Math.random() * 3;
@@ -426,29 +433,31 @@ export class Stage {
   render(now: number, session: Session | null) {
     const dt = this.lastRender ? Math.min(now - this.lastRender, 0.05) : 0.016;
     this.lastRender = now;
-    const points = this.rigPoints(now);
-    for (const [index, mesh] of this.joints)
-      mesh.position.lerp(points.get(index)!, 1 - Math.exp(-dt * 14));
-    for (const bone of this.bones)
-      this.placeBone(
-        bone.mesh,
-        this.joints.get(bone.a)!.position,
-        this.joints.get(bone.b)!.position,
-      );
-    if (this.torso) {
-      const shoulders = this.joints
-        .get(11)!
-        .position.clone()
-        .add(this.joints.get(12)!.position)
-        .multiplyScalar(0.5);
-      const hips = this.joints
-        .get(23)!
-        .position.clone()
-        .add(this.joints.get(24)!.position)
-        .multiplyScalar(0.5);
-      this.placeBone(this.torso, hips, shoulders);
+    if (this.rig.visible) {
+      const points = this.rigPoints(now);
+      for (const [index, mesh] of this.joints)
+        mesh.position.lerp(points.get(index)!, 1 - Math.exp(-dt * 14));
+      for (const bone of this.bones)
+        this.placeBone(
+          bone.mesh,
+          this.joints.get(bone.a)!.position,
+          this.joints.get(bone.b)!.position,
+        );
+      if (this.torso) {
+        const shoulders = this.joints
+          .get(11)!
+          .position.clone()
+          .add(this.joints.get(12)!.position)
+          .multiplyScalar(0.5);
+        const hips = this.joints
+          .get(23)!
+          .position.clone()
+          .add(this.joints.get(24)!.position)
+          .multiplyScalar(0.5);
+        this.placeBone(this.torso, hips, shoulders);
+      }
+      this.rig.rotation.y = Math.sin(now * 0.7) * 0.045;
     }
-    this.rig.rotation.y = Math.sin(now * 0.7) * 0.045;
     this.rings.forEach((ring, i) => {
       ring.rotation.z = now * (i % 2 ? -0.07 : 0.05);
       (ring.material as THREE.MeshBasicMaterial).opacity =
@@ -465,7 +474,8 @@ export class Stage {
           )
         : 0;
       const size = 1 + pulse * 0.14;
-      pad.scale.setScalar(size);
+      pad.scale.setScalar(size + this.hitPulse[side] * 0.42);
+      this.hitPulse[side] = Math.max(0, this.hitPulse[side] - dt * 4);
     }
     const visible = new Set<string>();
     if (session) {

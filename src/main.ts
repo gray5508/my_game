@@ -5,6 +5,7 @@ import {
   PoseSmoother,
   RhythmSession,
   mapPoseToWorld,
+  relativeWrist,
 } from "./logic.js";
 import { SongAudio } from "./audio";
 import { Stage } from "./stage";
@@ -69,7 +70,7 @@ worker.onmessage = (event: MessageEvent) => {
     status(
       stream
         ? "请站到镜头前，让肩膀和双手进入画面。"
-        : "姿态模型已加载。开启摄像头即可驱动小人。",
+        : "姿态模型已加载。开启摄像头即可识别挥拳。",
     );
   } else if (message.type === "pose") {
     busy = false;
@@ -77,7 +78,6 @@ worker.onmessage = (event: MessageEvent) => {
     const at = message.at as number;
     const smooth = smoother.update(raw, at);
     const worldPose = mapPoseToWorld(smooth);
-    stage.setPose(worldPose, at);
     drawSkeleton(raw);
     const visible =
       !!raw?.[11] &&
@@ -95,14 +95,20 @@ worker.onmessage = (event: MessageEvent) => {
           visual: { x: number; y: number; z: number };
         }
       > = {};
-      const shoulderX = (raw![11].x + raw![12].x) / 2;
-      const shoulderZ = (raw![11].z + raw![12].z) / 2;
       for (const index of [15, 16]) {
         const p = raw![index];
         const elbow = raw![index === 15 ? 13 : 14];
         const shoulder = raw![index === 15 ? 11 : 12];
         const visual = worldPose[index];
-        if (p && elbow && shoulder && visual && (p.visibility ?? 0) > 0.55) {
+        if (
+          p &&
+          elbow &&
+          shoulder &&
+          visual &&
+          (p.visibility ?? 0) > 0.55 &&
+          (elbow.visibility ?? 0) > 0.5 &&
+          (shoulder.visibility ?? 0) > 0.5
+        ) {
           const a = [shoulder.x - elbow.x, shoulder.y - elbow.y];
           const b = [p.x - elbow.x, p.y - elbow.y];
           const dot = a[0] * b[0] + a[1] * b[1];
@@ -111,10 +117,11 @@ worker.onmessage = (event: MessageEvent) => {
             length > 0.0001
               ? Math.acos(Math.max(-1, Math.min(1, dot / length))) / Math.PI
               : 0;
+          const motion = relativeWrist(p, raw![11], raw![12]);
           wrists[String(index)] = {
             ...p,
-            x: shoulderX - p.x,
-            z: p.z - shoulderZ,
+            x: motion.x,
+            z: motion.z,
             reach,
             visual,
           };
@@ -236,7 +243,6 @@ function disconnectCamera() {
   cameraButton.querySelector("span:nth-child(2)")!.innerHTML =
     "开启摄像头<small>接入骨架追踪</small>";
   trackingState.textContent = "摄像头已关闭";
-  stage.setPose([], 0);
   smoother.update(null, performance.now() / 1000);
   punches.update({}, performance.now() / 1000);
   status("摄像头已关闭，仍可使用 A / L 键练习。");
@@ -322,7 +328,6 @@ async function startGame() {
     status("音频不可用；画面与键盘操作仍可继续。");
   }
   const startAt = performance.now() / 1000 + 3 * BEAT;
-  stage.playing = true;
   session = new RhythmSession(startAt);
   resultShown = false;
   lastCount = "";
@@ -343,7 +348,6 @@ async function startGame() {
 function finishGame() {
   if (!session || resultShown) return;
   resultShown = true;
-  stage.playing = false;
   startButton.disabled = false;
   startButton.style.opacity = "1";
   get<HTMLElement>("overlayTitle").textContent = session.hits
@@ -417,11 +421,6 @@ cameraSelect.addEventListener("change", () => {
 });
 startButton.addEventListener("click", startGame);
 overlayStart.addEventListener("click", startGame);
-get<HTMLInputElement>("smoothRange").addEventListener("input", (event) => {
-  const value = Number((event.target as HTMLInputElement).value);
-  smoother.tau = value / 1000;
-  get<HTMLElement>("smoothValue").textContent = `${value} ms`;
-});
 get<HTMLInputElement>("speedRange").addEventListener("input", (event) => {
   const value = Number((event.target as HTMLInputElement).value);
   punches.speed = value / 100;

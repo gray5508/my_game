@@ -32,7 +32,7 @@
             <div>
               <span class="eyebrow">01 / INTERACTIVE TRACK</span>
               <h1>跟上节拍，<em>打出你的光。</em></h1>
-              <p>左侧连续几拳，再换右侧；音符靠近拳套时出手。</p>
+              <p>左侧两拳、右侧两拳；光圈靠近时朝对应方向出手。</p>
             </div>
             <div class="track-label">
               <span>♪</span>
@@ -59,7 +59,7 @@
               <span class="eyebrow">READY WHEN YOU ARE</span>
               <h2 id="overlayTitle">准备好进入节奏了吗？</h2>
               <p id="overlayText">
-                接入摄像头让 3D 小人跟随你的动作，或者用 A / L 键先试玩。
+                接入摄像头识别左右挥拳，或者用 A / L 键先试玩。
               </p>
               <button class="primary overlay-button" id="overlayStart">
                 开始演奏 <span>↗</span>
@@ -79,7 +79,7 @@
           <div class="hint-strip">
             <span class="hint-icon">✳</span
             ><span
-              >让肩膀和双手进入画面。光圈会靠近你的拳套，音符抵达时快速出拳；也可用
+              >让肩膀和双手进入画面。看准前方光圈挥拳，出拳后记得收拳；也可用
               <kbd>A</kbd> / <kbd>L</kbd> 练习。</span
             >
           </div>
@@ -120,19 +120,6 @@
             </select>
           </div>
           <div class="control-group range-group">
-            <label for="smoothRange"
-              >骨架平滑 <span id="smoothValue">110 ms</span></label
-            ><input
-              id="smoothRange"
-              type="range"
-              min="50"
-              max="240"
-              step="10"
-              value="110"
-            />
-            <div class="range-ends"><span>灵敏</span><span>稳定</span></div>
-          </div>
-          <div class="control-group range-group">
             <label for="speedRange"
               >出拳灵敏度 <span id="speedValue">标准</span></label
             ><input
@@ -159,9 +146,7 @@
           </button>
           <div class="panel-note">
             <span>⌁</span>
-            <p id="statusText">
-              小人现在是待机动画。连接摄像头后，你的骨架会实时驱动它。
-            </p>
+            <p id="statusText">连接摄像头后，会在本机识别骨架和左右挥拳。</p>
           </div>
         </aside>
       </main>

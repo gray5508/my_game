@@ -7,6 +7,7 @@ import {
   PoseSmoother,
   PunchDetector,
   mapPoseToWorld,
+  relativeWrist,
 } from "../src/logic.js";
 
 test("chart stays inside the 32 beat song", () => {
@@ -61,6 +62,21 @@ test("front-facing camera maps left fist to avatar left and forward into the sce
   assert.ok(rest.z < 0 && punch.z < rest.z);
 });
 
+test("wrist motion is comparable at different camera distances", () => {
+  const near = relativeWrist(
+    { x: 0.8, z: -0.12 },
+    { x: 0.65, z: 0 },
+    { x: 0.35, z: 0 },
+  );
+  const far = relativeWrist(
+    { x: 0.6, z: -0.04 },
+    { x: 0.55, z: 0 },
+    { x: 0.45, z: 0 },
+  );
+  assert.ok(Math.abs(near.x - far.x) < 1e-9);
+  assert.ok(Math.abs(near.z - far.z) < 1e-9);
+});
+
 test("directional punch fires without touching a target and respects cooldown", () => {
   const punches = new PunchDetector(0.45);
   assert.deepEqual(
@@ -71,13 +87,13 @@ test("directional punch fires without touching a target and respects cooldown", 
     [],
   );
   const hit = punches.update(
-    { 16: { x: 0.3, z: 0, reach: 0.52, visual: { x: 0, y: 0 } } },
+    { 16: { x: 0.5, z: 0, reach: 0.52, visual: { x: 0, y: 0 } } },
     0.12,
   );
   assert.equal(hit[0]?.side, "R");
   assert.deepEqual(
     punches.update(
-      { 16: { x: 0.4, z: 0, reach: 0.52, visual: { x: 0, y: 0 } } },
+      { 16: { x: 0.6, z: 0, reach: 0.52, visual: { x: 0, y: 0 } } },
       0.2,
     ),
     [],
@@ -87,7 +103,7 @@ test("directional punch fires without touching a target and respects cooldown", 
     [],
   );
   assert.equal(
-    punches.update({ 16: { x: 0.3, z: 0, reach: 0.5 } }, 0.55)[0]?.side,
+    punches.update({ 16: { x: 0.5, z: 0, reach: 0.5 } }, 0.55)[0]?.side,
     "R",
   );
   const still = new PunchDetector(0.45);
@@ -98,14 +114,11 @@ test("directional punch fires without touching a target and respects cooldown", 
   );
   const wave = new PunchDetector(0.45);
   wave.update({ 16: { x: 0.2, z: 0, reach: 0.5 } }, 0);
-  assert.deepEqual(
-    wave.update({ 16: { x: 0.33, z: 0, reach: 0.5 } }, 0.12),
-    [],
-  );
+  assert.deepEqual(wave.update({ 16: { x: 0.7, z: 0, reach: 0.5 } }, 0.12), []);
   const heavy = new PunchDetector(1);
   heavy.update({ 16: { x: 0.2, z: 0, reach: 0.45 } }, 0);
   assert.deepEqual(
-    heavy.update({ 16: { x: 0.3, z: 0, reach: 0.52 } }, 0.12),
+    heavy.update({ 16: { x: 0.5, z: 0, reach: 0.52 } }, 0.12),
     [],
   );
 });

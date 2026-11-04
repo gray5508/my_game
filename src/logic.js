@@ -145,6 +145,14 @@ export function mapPoseToWorld(points) {
   );
 }
 
+export function relativeWrist(wrist, leftShoulder, rightShoulder) {
+  const width = Math.max(0.06, Math.abs(leftShoulder.x - rightShoulder.x));
+  return {
+    x: ((leftShoulder.x + rightShoulder.x) / 2 - wrist.x) / width,
+    z: (wrist.z - (leftShoulder.z + rightShoulder.z) / 2) / width,
+  };
+}
+
 export class PunchDetector {
   constructor(speed = 0.45) {
     this.speed = speed;
@@ -169,8 +177,8 @@ export class PunchDetector {
         const flex = (arm.reach ?? 0) - (p.reach ?? 0);
         if (
           now - arm.at > 0.24 &&
-          (inward > 0.025 ||
-            backward > 0.03 ||
+          (inward > 0.12 ||
+            backward > 0.15 ||
             flex > 0.08 ||
             now - arm.at > 0.75)
         )
@@ -183,11 +191,11 @@ export class PunchDetector {
       const outward = Math.max(0, side === "L" ? old.x - p.x : p.x - old.x);
       const forward = Math.max(0, old.z - p.z);
       const extension = Math.max(0, (p.reach ?? 0) - (old.reach ?? 0));
-      const strength = outward / 0.07 + forward / 0.055 + extension / 0.11;
+      const strength = outward / 0.35 + forward / 0.275 + extension / 0.11;
       const punchShape =
-        forward >= 0.03 ||
+        forward >= 0.15 ||
         extension >= 0.04 ||
-        (outward >= 0.05 && (p.reach ?? 0) > 0.7);
+        (outward >= 0.25 && (p.reach ?? 0) > 0.7);
       if (punchShape && strength >= 1.25 * (this.speed / 0.45)) {
         this.lastPunch[side] = now;
         Object.assign(arm, {
