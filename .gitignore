@@ -5,4 +5,5 @@ models/*.task
 legacy-python/models/*.task
 node_modules/
 dist/
+recordings/
 public/wasm/

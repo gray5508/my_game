@@ -1,17 +1,18 @@
 export const BPM = 108;
 export const BEAT = 60 / BPM;
-export const TRAVEL = 1.55;
-export const WINDOW = 0.22;
+export const TRAVEL = 1.25;
+export const WINDOW = 0.27;
+export const HIT_Y = -0.05;
 
 const bars = [
-  "L.R.L.R.",
-  "L.R.LR..",
-  "R.L.R.L.",
-  "R.L.RL..",
-  "L.R.L.R.",
-  "L.RL.R..",
-  "R.L.R.L.",
-  "L.R.LR..",
+  "L...L...",
+  "R...R...",
+  "L...L...",
+  "R...R...",
+  "L...L...",
+  "R...R...",
+  "L...L...",
+  "R...R...",
 ];
 
 export function makeChart() {
@@ -75,10 +76,10 @@ export class RhythmSession {
     return { note, grade, points };
   }
 
-  tick(now) {
+  tick(now, grace = 0) {
     const elapsed = now - this.startAt;
     for (const note of this.notes) {
-      if (note.state === "pending" && elapsed > note.at + WINDOW) {
+      if (note.state === "pending" && elapsed > note.at + WINDOW + grace) {
         note.state = "miss";
         this.misses++;
         this.combo = 0;
@@ -120,35 +121,90 @@ export class PoseSmoother {
   }
 }
 
+// A front-facing webcam is mirrored into a rear-view avatar in world space.
+// Negative z points away from the virtual camera and toward the note lanes.
+export function mapPoseToWorld(points) {
+  const left = points?.[11];
+  const right = points?.[12];
+  if (!left || !right) return [];
+  const centerX = (left.x + right.x) / 2;
+  const centerY = (left.y + right.y) / 2;
+  const shoulderZ = (left.z + right.z) / 2;
+  const scale = Math.max(
+    3.5,
+    Math.min(9, 1.7 / Math.max(0.01, Math.abs(left.x - right.x))),
+  );
+  return points.map((p) =>
+    p
+      ? {
+          x: Math.max(-3, Math.min(3, (centerX - p.x) * scale)),
+          y: Math.max(-3.2, Math.min(3.2, (centerY - p.y) * scale + 1.43)),
+          z: Math.max(-2.2, Math.min(2.2, (p.z - shoulderZ) * scale * 0.8)),
+        }
+      : null,
+  );
+}
+
 export class PunchDetector {
-  constructor(speed = 0.75) {
+  constructor(speed = 0.45) {
     this.speed = speed;
-    this.previous = new Map();
+    this.history = new Map();
+    this.arm = new Map();
     this.lastPunch = { L: -100, R: -100 };
   }
 
   update(wrists, now) {
     const fired = [];
     for (const [name, p] of Object.entries(wrists)) {
-      const old = this.previous.get(name);
-      this.previous.set(name, { ...p, at: now });
-      if (!old) continue;
+      const side = name === "15" ? "L" : "R";
+      const history = this.history.get(name) ?? [];
+      history.push({ x: p.x, z: p.z, reach: p.reach, at: now });
+      while (history.length && now - history[0].at > 0.24) history.shift();
+      this.history.set(name, history);
+      const arm = this.arm.get(name) ?? { armed: true };
+      this.arm.set(name, arm);
+      if (!arm.armed) {
+        const inward = side === "L" ? p.x - arm.x : arm.x - p.x;
+        const backward = p.z - arm.z;
+        const flex = (arm.reach ?? 0) - (p.reach ?? 0);
+        if (
+          now - arm.at > 0.24 &&
+          (inward > 0.025 ||
+            backward > 0.03 ||
+            flex > 0.08 ||
+            now - arm.at > 0.75)
+        )
+          arm.armed = true;
+        else continue;
+      }
+      const old = history[0];
       const dt = now - old.at;
-      if (dt < 0.015 || dt > 0.35 || p.y < 0.1 || p.y > 0.88) continue;
-      const side = p.x < 0.39 ? "L" : p.x > 0.61 ? "R" : null;
-      if (!side || now - this.lastPunch[side] < 0.28) continue;
-      const outward = side === "L" ? old.x - p.x : p.x - old.x;
-      const forward = old.z - p.z;
-      if (
-        (outward >= 0.04 && outward / dt >= this.speed) ||
-        (forward >= 0.06 && forward / dt >= this.speed * 1.2)
-      ) {
+      if (dt < 0.08 || now - this.lastPunch[side] < 0.3) continue;
+      const outward = Math.max(0, side === "L" ? old.x - p.x : p.x - old.x);
+      const forward = Math.max(0, old.z - p.z);
+      const extension = Math.max(0, (p.reach ?? 0) - (old.reach ?? 0));
+      const strength = outward / 0.07 + forward / 0.055 + extension / 0.11;
+      const punchShape =
+        forward >= 0.03 ||
+        extension >= 0.04 ||
+        (outward >= 0.05 && (p.reach ?? 0) > 0.7);
+      if (punchShape && strength >= 1.25 * (this.speed / 0.45)) {
         this.lastPunch[side] = now;
-        fired.push(side);
+        Object.assign(arm, {
+          armed: false,
+          x: p.x,
+          z: p.z,
+          reach: p.reach,
+          at: now,
+        });
+        fired.push({ side, x: p.visual?.x ?? 0, y: p.visual?.y ?? HIT_Y });
       }
     }
-    for (const key of this.previous.keys())
-      if (!(key in wrists)) this.previous.delete(key);
+    for (const key of this.history.keys())
+      if (!(key in wrists)) {
+        this.history.delete(key);
+        this.arm.delete(key);
+      }
     return fired;
   }
 }

@@ -395,6 +395,12 @@ input:focus-visible {
   color: #ff85b2;
   text-shadow: 0 0 18px #f35196;
 }
+.score-pop.soft {
+  color: #a9c1d2;
+  font-size: 16px;
+  letter-spacing: 1px;
+  text-shadow: 0 0 12px #5184a9;
+}
 @keyframes scorePop {
   0% {
     opacity: 0;

@@ -1,5 +1,11 @@
 import "./style.css";
-import { BEAT, PunchDetector, PoseSmoother, RhythmSession } from "./logic.js";
+import {
+  BEAT,
+  PunchDetector,
+  PoseSmoother,
+  RhythmSession,
+  mapPoseToWorld,
+} from "./logic.js";
 import { SongAudio } from "./audio";
 import { Stage } from "./stage";
 
@@ -26,7 +32,7 @@ const arena = get<HTMLDivElement>("arena");
 const stage = new Stage(arena);
 const audio = new SongAudio();
 const smoother = new PoseSmoother(0.11);
-const punches = new PunchDetector(0.75);
+const punches = new PunchDetector(0.45);
 const video = get<HTMLVideoElement>("cameraVideo");
 const camCanvas = get<HTMLCanvasElement>("cameraCanvas");
 const camContext = camCanvas.getContext("2d")!;
@@ -70,7 +76,8 @@ worker.onmessage = (event: MessageEvent) => {
     const raw = message.points as Landmark[] | null;
     const at = message.at as number;
     const smooth = smoother.update(raw, at);
-    stage.setPose(smooth, at);
+    const worldPose = mapPoseToWorld(smooth);
+    stage.setPose(worldPose, at);
     drawSkeleton(raw);
     const visible =
       !!raw?.[11] &&
@@ -78,16 +85,47 @@ worker.onmessage = (event: MessageEvent) => {
       (raw[11].visibility ?? 0) > 0.5 &&
       (raw[12].visibility ?? 0) > 0.5;
     trackingState.textContent = visible
-      ? "人体骨架已锁定"
+      ? "骨架已锁定 · 跟着节拍挥拳"
       : "请让上半身进入画面";
     if (visible) {
-      const wrists: Record<string, Landmark> = {};
+      const wrists: Record<
+        string,
+        Landmark & {
+          reach: number;
+          visual: { x: number; y: number; z: number };
+        }
+      > = {};
+      const shoulderX = (raw![11].x + raw![12].x) / 2;
+      const shoulderZ = (raw![11].z + raw![12].z) / 2;
       for (const index of [15, 16]) {
         const p = raw![index];
-        if (p && (p.visibility ?? 0) > 0.55)
-          wrists[String(index)] = { ...p, x: 1 - p.x };
+        const elbow = raw![index === 15 ? 13 : 14];
+        const shoulder = raw![index === 15 ? 11 : 12];
+        const visual = worldPose[index];
+        if (p && elbow && shoulder && visual && (p.visibility ?? 0) > 0.55) {
+          const a = [shoulder.x - elbow.x, shoulder.y - elbow.y];
+          const b = [p.x - elbow.x, p.y - elbow.y];
+          const dot = a[0] * b[0] + a[1] * b[1];
+          const length = Math.hypot(...a) * Math.hypot(...b);
+          const reach =
+            length > 0.0001
+              ? Math.acos(Math.max(-1, Math.min(1, dot / length))) / Math.PI
+              : 0;
+          wrists[String(index)] = {
+            ...p,
+            x: shoulderX - p.x,
+            z: p.z - shoulderZ,
+            reach,
+            visual,
+          };
+        }
       }
-      for (const side of punches.update(wrists, at) as Side[]) attempt(side);
+      for (const hit of punches.update(wrists, at))
+        if (!attempt(hit.side as Side, hit, at)) {
+          stage.hit(hit.side as Side, hit, false);
+          if (session && !session.finished)
+            showFeedback("挥拳已识别 · 等待节拍", "soft");
+        }
     } else punches.update({}, at);
   } else if (message.type === "error") {
     busy = false;
@@ -200,6 +238,7 @@ function disconnectCamera() {
   trackingState.textContent = "摄像头已关闭";
   stage.setPose([], 0);
   smoother.update(null, performance.now() / 1000);
+  punches.update({}, performance.now() / 1000);
   status("摄像头已关闭，仍可使用 A / L 键练习。");
 }
 
@@ -245,22 +284,34 @@ function drawSkeleton(points: Landmark[] | null) {
   }
 }
 
-function attempt(side: Side) {
-  if (!session || session.finished) return;
-  const result = session.attempt(side, performance.now() / 1000);
-  if (!result) return;
-  stage.hit(side);
-  audio.hit(result.grade);
-  scorePop.textContent = `${result.grade}  +${result.points}`;
-  scorePop.className = `score-pop ${result.grade === "GOOD" ? "good" : ""}`;
+function showFeedback(message: string, tone = "") {
+  scorePop.textContent = message;
+  scorePop.className = `score-pop ${tone}`;
   void scorePop.offsetWidth;
   scorePop.classList.add("show");
+}
+
+function attempt(
+  side: Side,
+  impact?: { x: number; y: number },
+  at = performance.now() / 1000,
+) {
+  if (!session || session.finished) return false;
+  const result = session.attempt(side, at);
+  if (!result) return false;
+  stage.hit(side, impact);
+  audio.hit(result.grade);
+  showFeedback(
+    `${result.grade}  +${result.points}`,
+    result.grade === "GOOD" ? "good" : "",
+  );
   get<HTMLElement>("score").textContent = String(session.score).padStart(
     5,
     "0",
   );
   get<HTMLElement>("combo").innerHTML = `${session.combo}<span>×</span>`;
   get<HTMLElement>("accuracy").innerHTML = `${session.accuracy}<span>%</span>`;
+  return true;
 }
 
 async function startGame() {
@@ -271,6 +322,7 @@ async function startGame() {
     status("音频不可用；画面与键盘操作仍可继续。");
   }
   const startAt = performance.now() / 1000 + 3 * BEAT;
+  stage.playing = true;
   session = new RhythmSession(startAt);
   resultShown = false;
   lastCount = "";
@@ -291,6 +343,7 @@ async function startGame() {
 function finishGame() {
   if (!session || resultShown) return;
   resultShown = true;
+  stage.playing = false;
   startButton.disabled = false;
   startButton.style.opacity = "1";
   get<HTMLElement>("overlayTitle").textContent = session.hits
@@ -329,7 +382,7 @@ function loop() {
       });
   }
   if (session) {
-    session.tick(now);
+    session.tick(now, stream && workerReady ? 0.18 : 0);
     const remaining = session.startAt - now;
     const count =
       remaining > 0
@@ -373,7 +426,7 @@ get<HTMLInputElement>("speedRange").addEventListener("input", (event) => {
   const value = Number((event.target as HTMLInputElement).value);
   punches.speed = value / 100;
   get<HTMLElement>("speedValue").textContent =
-    value < 65 ? "灵敏" : value > 90 ? "稳健" : "标准";
+    value < 40 ? "灵敏" : value > 65 ? "稳健" : "标准";
 });
 get<HTMLButtonElement>("muteButton").addEventListener("click", (event) => {
   audio.setMuted(!audio.muted);
