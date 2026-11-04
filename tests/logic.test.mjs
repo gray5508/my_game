@@ -131,3 +131,12 @@ test("arm extension also detects a forward punch", () => {
     "L",
   );
 });
+
+test("a moderate punch registers at standard sensitivity", () => {
+  const detector = new PunchDetector(0.45);
+  detector.update({ 16: { x: 0.2, z: 0, reach: 0.5 } }, 0);
+  assert.equal(
+    detector.update({ 16: { x: 0.46, z: 0, reach: 0.54 } }, 0.15)[0]?.side,
+    "R",
+  );
+});

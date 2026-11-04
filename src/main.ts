@@ -55,6 +55,7 @@ let lastCapture = 0;
 let modelFailed = false;
 let lastCount = "";
 let resultShown = false;
+let detectedPunches = 0;
 
 function status(message: string) {
   statusText.textContent = message;
@@ -127,12 +128,17 @@ worker.onmessage = (event: MessageEvent) => {
           };
         }
       }
-      for (const hit of punches.update(wrists, at))
+      for (const hit of punches.update(wrists, at)) {
+        if (!session || session.finished) continue;
+        detectedPunches++;
         if (!attempt(hit.side as Side, hit, at)) {
           stage.hit(hit.side as Side, hit, false);
-          if (session && !session.finished)
-            showFeedback("挥拳已识别 · 等待节拍", "soft");
+          showFeedback("挥拳已识别 · 等待节拍", "soft");
         }
+        status(
+          `已识别 ${detectedPunches} 次挥拳 · 命中 ${session.hits}/${session.notes.length}`,
+        );
+      }
     } else punches.update({}, at);
   } else if (message.type === "error") {
     busy = false;
@@ -329,6 +335,7 @@ async function startGame() {
   }
   const startAt = performance.now() / 1000 + 3 * BEAT;
   session = new RhythmSession(startAt);
+  detectedPunches = 0;
   resultShown = false;
   lastCount = "";
   if (audio.context) audio.schedule(audio.now() + 3 * BEAT);
@@ -353,8 +360,9 @@ function finishGame() {
   get<HTMLElement>("overlayTitle").textContent = session.hits
     ? "这一曲，打得漂亮。"
     : "再试一次，找到节拍。";
+  const punchSummary = stream ? ` · 识别挥拳 ${detectedPunches} 次` : "";
   get<HTMLElement>("overlayText").textContent =
-    `得分 ${session.score} · 命中 ${session.hits}/${session.notes.length} · 最佳连击 ${session.bestCombo}。再来一次，刷新你的记录。`;
+    `得分 ${session.score} · 命中 ${session.hits}/${session.notes.length}${punchSummary} · 最佳连击 ${session.bestCombo}。`;
   overlay.querySelector(".eyebrow")!.textContent = "TRACK COMPLETE";
   overlay.querySelector("small")!.textContent =
     "提示：没有摄像头也能用 A / L 键击打音符";
