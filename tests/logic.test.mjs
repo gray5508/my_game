@@ -101,13 +101,13 @@ test("directional punch fires without touching a target and respects cooldown", 
     [],
   );
   const hit = punches.update(
-    { 16: { x: 0.5, z: 0, reach: 0.52, visual: { x: 0, y: 0 } } },
+    { 16: { x: 0.5, z: 0, reach: 0.78, visual: { x: 0, y: 0 } } },
     0.12,
   );
   assert.equal(hit[0]?.side, "R");
   assert.deepEqual(
     punches.update(
-      { 16: { x: 0.6, z: 0, reach: 0.52, visual: { x: 0, y: 0 } } },
+      { 16: { x: 0.6, z: 0, reach: 0.78, visual: { x: 0, y: 0 } } },
       0.2,
     ),
     [],
@@ -117,7 +117,7 @@ test("directional punch fires without touching a target and respects cooldown", 
     [],
   );
   assert.equal(
-    punches.update({ 16: { x: 0.5, z: 0, reach: 0.5 } }, 0.55)[0]?.side,
+    punches.update({ 16: { x: 0.5, z: 0, reach: 0.78 } }, 0.55)[0]?.side,
     "R",
   );
   const still = new PunchDetector(0.45);
@@ -127,12 +127,21 @@ test("directional punch fires without touching a target and respects cooldown", 
     [],
   );
   const wave = new PunchDetector(0.45);
-  wave.update({ 16: { x: 0.2, z: 0, reach: 0.5 } }, 0);
-  assert.deepEqual(wave.update({ 16: { x: 0.7, z: 0, reach: 0.5 } }, 0.12), []);
+  wave.update({ 16: { x: 0.2, z: 0, reach: 0.8 } }, 0);
+  assert.deepEqual(wave.update({ 16: { x: 0.7, z: 0, reach: 0.8 } }, 0.12), []);
   const heavy = new PunchDetector(1);
-  heavy.update({ 16: { x: 0.2, z: 0, reach: 0.45 } }, 0);
+  heavy.update({ 16: { x: 0.2, z: 0, reach: 0.7 } }, 0);
   assert.deepEqual(
-    heavy.update({ 16: { x: 0.5, z: 0, reach: 0.52 } }, 0.12),
+    heavy.update({ 16: { x: 0.5, z: 0, reach: 0.76 } }, 0.12),
+    [],
+  );
+});
+
+test("moving a bent arm does not count as a punch", () => {
+  const detector = new PunchDetector(0.45);
+  detector.update({ 16: { x: 0.2, z: 0, reach: 0.4 } }, 0);
+  assert.deepEqual(
+    detector.update({ 16: { x: 0.55, z: -0.18, reach: 0.6 } }, 0.15),
     [],
   );
 });
@@ -141,16 +150,16 @@ test("arm extension also detects a forward punch", () => {
   const detector = new PunchDetector(0.45);
   detector.update({ 15: { x: -0.2, z: 0, reach: 0.4 } }, 0);
   assert.equal(
-    detector.update({ 15: { x: -0.2, z: 0, reach: 0.55 } }, 0.15)[0]?.side,
+    detector.update({ 15: { x: -0.2, z: 0, reach: 0.77 } }, 0.15)[0]?.side,
     "L",
   );
 });
 
 test("a moderate punch registers at standard sensitivity", () => {
   const detector = new PunchDetector(0.45);
-  detector.update({ 16: { x: 0.2, z: 0, reach: 0.5 } }, 0);
+  detector.update({ 16: { x: 0.2, z: 0, reach: 0.64 } }, 0);
   assert.equal(
-    detector.update({ 16: { x: 0.46, z: 0, reach: 0.54 } }, 0.15)[0]?.side,
+    detector.update({ 16: { x: 0.46, z: 0, reach: 0.76 } }, 0.15)[0]?.side,
     "R",
   );
 });

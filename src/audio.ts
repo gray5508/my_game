@@ -115,19 +115,4 @@ export class SongAudio {
       this.tone(pitch, startAt + note.at, 0.16, 0.055, "triangle");
     }
   }
-
-  hit(grade: string) {
-    if (!this.context) return;
-    const at = this.context.currentTime;
-    this.tone(125, at, 0.28, 0.26, "sine", 48);
-    this.hiss(at, 0.11, 0.14);
-    this.tone(grade === "PERFECT" ? 987.77 : 784, at, 0.28, 0.17, "sine");
-    this.tone(
-      grade === "PERFECT" ? 1480 : 1174,
-      at + 0.035,
-      0.23,
-      0.095,
-      "sine",
-    );
-  }
 }

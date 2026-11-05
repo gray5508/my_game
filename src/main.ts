@@ -311,7 +311,6 @@ function attempt(
   const result = session.attempt(side, at);
   if (!result) return false;
   totalScore += result.points;
-  audio.hit(result.grade);
   stage.hit(side, impact);
   get<HTMLElement>("score").textContent = String(totalScore).padStart(5, "0");
   get<HTMLElement>("combo").innerHTML = `${session.combo}<span>×</span>`;

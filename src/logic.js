@@ -211,9 +211,7 @@ export class PunchDetector {
       const extension = Math.max(0, (p.reach ?? 0) - (old.reach ?? 0));
       const strength = outward / 0.35 + forward / 0.275 + extension / 0.11;
       const punchShape =
-        forward >= 0.12 ||
-        extension >= 0.03 ||
-        (outward >= 0.23 && (p.reach ?? 0) > 0.6);
+        (p.reach ?? 0) >= 0.74 && (forward >= 0.12 || extension >= 0.08);
       if (punchShape && strength >= 1.1 * (this.speed / 0.45)) {
         this.lastPunch[side] = now;
         Object.assign(arm, {
