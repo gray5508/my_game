@@ -7,14 +7,18 @@ import {
   RhythmSession,
   PoseSmoother,
   PunchDetector,
+  KickDetector,
   mapPoseToWorld,
   relativeWrist,
+  relativeAnkle,
 } from "../src/logic.js";
 
 test("chart stays inside the longer song", () => {
   const chart = makeChart();
-  assert.equal(CHART_BEATS, 64);
-  assert.equal(chart.length, 32);
+  assert.equal(CHART_BEATS, 128);
+  assert.equal(chart.length, 72);
+  assert.equal(chart.filter((note) => note.limb === "foot").length, 18);
+  assert.ok(beatTime(CHART_BEATS) > 60);
   assert.ok(
     chart.every((note) => note.at >= 0 && note.at < beatTime(CHART_BEATS)),
   );
@@ -26,7 +30,7 @@ test("chart stays inside the longer song", () => {
 });
 
 test("later beats and repeat rounds become faster", () => {
-  assert.ok(beatTime(48) - beatTime(32) < beatTime(16));
+  assert.ok(beatTime(96) - beatTime(80) < beatTime(16));
   assert.ok(
     new RhythmSession(0, 1.06).duration < new RhythmSession(0, 1).duration,
   );
@@ -47,6 +51,23 @@ test("punch scores only the matching note once, miss breaks combo", () => {
   game.tick(10 + game.notes[1].at + 0.3);
   assert.equal(game.combo, 0);
   assert.ok(game.misses > 0);
+});
+
+test("foot notes require a kick on the correct side", () => {
+  const game = new RhythmSession(10);
+  const foot = game.notes.find((note) => note.limb === "foot");
+  assert.equal(game.attempt(foot.side, 10 + foot.at, "hand"), null);
+  assert.equal(game.attempt(foot.side === "L" ? "R" : "L", 10 + foot.at, "foot"), null);
+  assert.equal(game.attempt(foot.side, 10 + foot.at, "foot")?.grade, "PERFECT");
+});
+
+test("kick fires on leg lift and waits for foot to return", () => {
+  const detector = new KickDetector();
+  assert.deepEqual(detector.update({27: {lift: 0, forward: 0}}, 0), []);
+  assert.equal(detector.update({27: {lift: 0.65, forward: 0.1}}, 0.15)[0]?.side, "L");
+  assert.deepEqual(detector.update({27: {lift: 0.8, forward: 0.15}}, 0.3), []);
+  detector.update({27: {lift: 0.1, forward: 0.1}}, 0.5);
+  assert.equal(detector.update({27: {lift: 0.7, forward: 0.15}}, 0.7)[0]?.side, "L");
 });
 
 test("camera inference delay does not erase a punch captured on beat", () => {

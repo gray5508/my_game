@@ -4,16 +4,19 @@ import {
   BPM,
   LATE_SPEEDUP,
   PunchDetector,
+  KickDetector,
   PoseSmoother,
   RhythmSession,
   mapPoseToWorld,
   relativeWrist,
+  relativeAnkle,
 } from "./logic.js";
 import { SongAudio } from "./audio";
 import { Stage } from "./stage";
 
 type Landmark = { x: number; y: number; z: number; visibility?: number };
 type Side = "L" | "R";
+type Limb = "hand" | "foot";
 const SKELETON = [
   [11, 12],
   [11, 13],
@@ -36,6 +39,7 @@ const stage = new Stage(arena);
 const audio = new SongAudio();
 const smoother = new PoseSmoother(0.11);
 const punches = new PunchDetector(0.45);
+const kicks = new KickDetector();
 const video = get<HTMLVideoElement>("cameraVideo");
 const camCanvas = get<HTMLCanvasElement>("cameraCanvas");
 const camContext = camCanvas.getContext("2d")!;
@@ -77,8 +81,8 @@ worker.onmessage = (event: MessageEvent) => {
     trackingState.textContent = stream ? "骨架追踪就绪" : "姿态模型就绪";
     status(
       stream
-        ? "请站到镜头前，让肩膀和双手进入画面。"
-        : "姿态模型已加载。开启摄像头即可识别挥拳。",
+        ? "请站到镜头前，让全身进入画面。"
+        : "姿态模型已加载。开启摄像头即可识别挥拳和踢腿。",
     );
   } else if (message.type === "pose") {
     busy = false;
@@ -93,8 +97,8 @@ worker.onmessage = (event: MessageEvent) => {
       (raw[11].visibility ?? 0) > 0.5 &&
       (raw[12].visibility ?? 0) > 0.5;
     trackingState.textContent = visible
-      ? "骨架已锁定 · 跟着节拍挥拳"
-      : "请让上半身进入画面";
+      ? "骨架已锁定 · 跟着节拍挥拳和踢腿"
+      : "请让全身进入画面";
     if (visible) {
       const wrists: Record<
         string,
@@ -138,7 +142,7 @@ worker.onmessage = (event: MessageEvent) => {
       for (const hit of punches.update(wrists, at)) {
         if (!session || session.finished) continue;
         detectedPunches++;
-        if (!attempt(hit.side as Side, hit, at)) {
+        if (!attempt(hit.side as Side, hit, at, "hand")) {
           stage.hit(hit.side as Side, hit, false);
           showFeedback("挥拳已识别 · 等待节拍", "soft");
         }
@@ -146,7 +150,30 @@ worker.onmessage = (event: MessageEvent) => {
           `已识别 ${detectedPunches} 次挥拳 · 命中 ${session.hits}/${session.notes.length}`,
         );
       }
-    } else punches.update({}, at);
+      const ankles: Record<string, { lift: number; forward: number; visual: { x: number; y: number; z: number } }> = {};
+      for (const index of [27, 28]) {
+        const ankle = raw![index];
+        const knee = raw![index === 27 ? 25 : 26];
+        const hip = raw![index === 27 ? 23 : 24];
+        const otherHip = raw![index === 27 ? 24 : 23];
+        const visual = worldPose[index];
+        if (ankle && knee && hip && otherHip && visual &&
+          (ankle.visibility ?? 0) > 0.55 && (knee.visibility ?? 0) > 0.5 &&
+          (hip.visibility ?? 0) > 0.5 && (otherHip.visibility ?? 0) > 0.5) {
+          ankles[String(index)] = { ...relativeAnkle(ankle, hip, knee), visual };
+        }
+      }
+      for (const kick of kicks.update(ankles, at)) {
+        if (!session || session.finished) continue;
+        if (!attempt(kick.side as Side, kick, at, "foot")) {
+          stage.hit(kick.side as Side, kick, false, "foot");
+          showFeedback("踢腿已识别 · 等待节拍", "soft");
+        }
+      }
+    } else {
+      punches.update({}, at);
+      kicks.update({}, at);
+    }
   } else if (message.type === "error") {
     busy = false;
     modelFailed = true;
@@ -234,7 +261,7 @@ async function connectCamera() {
     status(
       modelFailed
         ? "摄像头已连接，但姿态模型不可用。请刷新重试。"
-        : "摄像头已连接，请让上半身进入画面。",
+        : "摄像头已连接，请让全身进入画面。",
       modelFailed,
     );
     await listCameras();
@@ -259,6 +286,7 @@ function disconnectCamera() {
   trackingState.textContent = "摄像头已关闭";
   smoother.update(null, performance.now() / 1000);
   punches.update({}, performance.now() / 1000);
+  kicks.update({}, performance.now() / 1000);
   status("摄像头已关闭，仍可使用 A / L 键练习。");
 }
 
@@ -288,15 +316,15 @@ function drawSkeleton(points: Landmark[] | null) {
     camContext.stroke();
   }
   camContext.shadowBlur = 0;
-  for (const i of [15, 16]) {
+  for (const i of [15, 16, 27, 28]) {
     const p = points[i];
     if (!p || (p.visibility ?? 0) < 0.55) continue;
-    camContext.fillStyle = "#ff628f";
+    camContext.fillStyle = i >= 27 ? "#f9cf6a" : "#ff628f";
     camContext.beginPath();
     camContext.arc(
       p.x * camCanvas.width,
       p.y * camCanvas.height,
-      13,
+      i >= 27 ? 10 : 13,
       0,
       Math.PI * 2,
     );
@@ -315,13 +343,14 @@ function attempt(
   side: Side,
   impact?: { x: number; y: number },
   at = performance.now() / 1000,
+  limb: Limb = "hand",
 ) {
   if (!session || session.finished) return false;
-  const result = session.attempt(side, at);
+  const result = session.attempt(side, at, limb);
   if (!result) return false;
   totalScore += result.points;
-  stage.hit(side, impact);
-  audio.hit(result.grade);
+  stage.hit(side, impact, true, limb);
+  audio.hit(result.grade, limb);
   showFeedback(
     `${result.grade}  +${result.points}`,
     result.grade === "GOOD" ? "good" : "",
@@ -350,8 +379,8 @@ async function startGame() {
   get<HTMLElement>("accuracy").innerHTML = "100<span>%</span>";
   status(
     stream
-      ? "跟着音符挥拳！左右击打圈亮起时出手。"
-      : "键盘练习中：按 A 打左侧，按 L 打右侧。",
+      ? "跟着音符挥拳和踢腿！上方是手，下方是脚。"
+      : "键盘练习：A/L 打拳，Z/M 踢腿。",
   );
 }
 
@@ -385,7 +414,7 @@ function finishGame() {
     `得分 ${totalScore} · 命中 ${session.hits}/${session.notes.length}${punchSummary} · 最佳连击 ${session.bestCombo}。`;
   overlay.querySelector(".eyebrow")!.textContent = "TRACK COMPLETE";
   overlay.querySelector("small")!.textContent =
-    "提示：没有摄像头也能用 A / L 键击打音符";
+    "提示：没有摄像头也能用 A/L 打拳、Z/M 踢腿";
   overlayStart.innerHTML = "再来一局 <span>↗</span>";
   overlay.classList.remove("hidden");
   status("演奏结束。可以继续挑战，或调整灵敏度后再试。");
@@ -468,15 +497,11 @@ document.addEventListener("keydown", (event) => {
     ["INPUT", "SELECT"].includes((event.target as HTMLElement).tagName)
   )
     return;
-  const side =
-    event.key.toLowerCase() === "a"
-      ? "L"
-      : event.key.toLowerCase() === "l"
-        ? "R"
-        : null;
+  const key = event.key.toLowerCase();
+  const side = key === "a" || key === "z" ? "L" : key === "l" || key === "m" ? "R" : null;
   if (side) {
     event.preventDefault();
-    attempt(side);
+    attempt(side, undefined, performance.now() / 1000, key === "z" || key === "m" ? "foot" : "hand");
   }
 });
 window.addEventListener("beforeunload", () => {

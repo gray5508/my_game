@@ -22,6 +22,22 @@ const bars = [
   "R...R...",
   "L...L...",
   "R...R...",
+  "L...r...",
+  "R...l...",
+  "L.r.L...",
+  "R.l.R...",
+  "l...L...",
+  "r...R...",
+  "L...r...",
+  "R...l...",
+  "L.r.L...",
+  "R.l.R...",
+  "l...L...",
+  "r...R...",
+  "L.r.L.r.",
+  "R.l.R.l.",
+  "l...r...",
+  "L...R...",
 ];
 
 export const CHART_BEATS = bars.length * 4;
@@ -40,7 +56,8 @@ export function makeChart(speed = 1) {
         : [
             {
               id: `${barIndex}-${slot}`,
-              side,
+              side: side.toUpperCase(),
+              limb: side === side.toLowerCase() ? "foot" : "hand",
               at: beatTime(barIndex * 4 + slot / 2, speed),
               state: "pending",
             },
@@ -71,11 +88,11 @@ export class RhythmSession {
       : 100;
   }
 
-  attempt(side, now) {
+  attempt(side, now, limb = "hand") {
     const elapsed = now - this.startAt;
     let closest = null;
     for (const note of this.notes) {
-      if (note.state !== "pending" || note.side !== side) continue;
+      if (note.state !== "pending" || note.side !== side || note.limb !== limb) continue;
       const error = Math.abs(note.at - elapsed);
       if (error <= WINDOW && (!closest || error < closest.error))
         closest = { note, error };
@@ -169,6 +186,54 @@ export function relativeWrist(wrist, leftShoulder, rightShoulder) {
     x: ((leftShoulder.x + rightShoulder.x) / 2 - wrist.x) / width,
     z: (wrist.z - (leftShoulder.z + rightShoulder.z) / 2) / width,
   };
+}
+
+export function relativeAnkle(ankle, hip, knee) {
+  const leg = Math.max(0.06, Math.hypot(hip.x - knee.x, hip.y - knee.y));
+  return {
+    lift: (hip.y + leg * 2 - ankle.y) / leg,
+    forward: (hip.z - ankle.z) / leg,
+  };
+}
+
+export class KickDetector {
+  constructor() {
+    this.history = new Map();
+    this.armed = new Map();
+    this.lastKick = new Map();
+  }
+
+  update(ankles, now) {
+    const fired = [];
+    for (const [name, p] of Object.entries(ankles)) {
+      const side = name === "27" ? "L" : "R";
+      const history = this.history.get(name) ?? [];
+      history.push({ ...p, at: now });
+      while (history.length && now - history[0].at > 0.3) history.shift();
+      this.history.set(name, history);
+      if (this.armed.get(name) === false) {
+        if (p.lift < 0.35 && p.forward < 0.25) this.armed.set(name, true);
+        else continue;
+      }
+      const old = history[0];
+      const dt = now - old.at;
+      if (dt < 0.08 || now - (this.lastKick.get(name) ?? -100) < 0.45) continue;
+      const lift = p.lift - old.lift;
+      const forward = p.forward - old.forward;
+      if ((lift > 0.42 && p.lift > 0.48) ||
+          (forward > 0.38 && p.forward > 0.42)) {
+        this.armed.set(name, false);
+        this.lastKick.set(name, now);
+        fired.push({ side, x: p.visual?.x ?? 0, y: p.visual?.y ?? -1.8 });
+      }
+    }
+    for (const key of this.history.keys())
+      if (!(key in ankles)) {
+        this.history.delete(key);
+        this.armed.delete(key);
+      }
+    return fired;
+  }
 }
 
 export class PunchDetector {

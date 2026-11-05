@@ -75,7 +75,8 @@ export class SongAudio {
   }
 
   schedule(startAt: number, speed = 1) {
-    const melody = [329.63, 392, 440, 523.25, 493.88, 440, 392, 329.63];
+    const melody = [329.63, 392, 440, 523.25, 493.88, 440, 392, 329.63,
+      392, 440, 523.25, 587.33, 523.25, 493.88, 440, 392];
     const countBeat = BEAT / speed;
     for (let i = 0; i < 4; i++)
       this.tone(
@@ -107,21 +108,29 @@ export class SongAudio {
           0.13,
           "triangle",
         );
+      if (beat >= 32 && beat % 4 === 2)
+        this.tone(196, at, 0.16, 0.065, "sawtooth", 146.83);
+      if (beat >= 96 && beat % 2 === 1)
+        this.hiss(at + (beatTime(beat + 0.5, speed) - beatTime(beat, speed)), 0.075, 0.07);
     }
     for (const note of makeChart(speed)) {
-      const pitch =
-        melody[Number(note.id.split("-")[0]) % melody.length] *
-        (note.side === "R" ? 1.25 : 1);
-      this.tone(pitch, startAt + note.at, 0.16, 0.055, "triangle");
+      if (note.limb === "foot") {
+        this.tone(note.side === "L" ? 98 : 123.47, startAt + note.at, 0.28, 0.17, "sine", 48);
+      } else {
+        const pitch =
+          melody[Number(note.id.split("-")[0]) % melody.length] *
+          (note.side === "R" ? 1.25 : 1);
+        this.tone(pitch, startAt + note.at, 0.16, 0.055, "triangle");
+      }
     }
   }
 
-  hit(grade: string) {
+  hit(grade: string, limb: "hand" | "foot" = "hand") {
     if (!this.context) return;
     const at = this.context.currentTime;
-    this.tone(125, at, 0.28, 0.26, "sine", 48);
+    this.tone(limb === "foot" ? 88 : 125, at, 0.28, limb === "foot" ? 0.34 : 0.26, "sine", 48);
     this.hiss(at, 0.11, 0.14);
-    this.tone(grade === "PERFECT" ? 987.77 : 784, at, 0.28, 0.17, "sine");
+    this.tone(grade === "PERFECT" ? 987.77 : 784, at, 0.28, limb === "foot" ? 0.1 : 0.17, "sine");
     this.tone(
       grade === "PERFECT" ? 1480 : 1174,
       at + 0.035,

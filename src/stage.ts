@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { HIT_Y, TRAVEL, WINDOW } from "./logic.js";
 
 type Point = { x: number; y: number; z: number; visibility?: number } | null;
-type Note = { id: string; side: string; at: number; state: string };
+type Note = { id: string; side: string; limb: string; at: number; state: string };
 type Session = { startAt: number; notes: Note[] };
 
 const CYAN = 0x59f3e5;
@@ -22,15 +22,15 @@ function material(color: number, emissive = color, intensity = 0.4) {
   });
 }
 
-function noteTexture() {
+function noteTexture(glyph: string) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 256;
   const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 168px Arial, sans-serif";
+  ctx.font = "bold 145px Arial, Microsoft YaHei, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("♪", 124, 127);
+  ctx.fillText(glyph, 124, 127);
   return new THREE.CanvasTexture(canvas);
 }
 
@@ -52,7 +52,8 @@ export class Stage {
   }[] = [];
   shockwaves: { mesh: THREE.Mesh; life: number; duration: number }[] = [];
   pads: { L: THREE.Group; R: THREE.Group };
-  rails: { side: "L" | "R"; offset: number; line: THREE.Line }[] = [];
+  footPads: { L: THREE.Group; R: THREE.Group };
+  rails: { side: "L" | "R"; limb: "hand" | "foot"; offset: number; line: THREE.Line }[] = [];
   rings: THREE.Mesh[] = [];
   pose: Point[] = [];
   poseAt = 0;
@@ -60,7 +61,8 @@ export class Stage {
   hitPulse = { L: 0, R: 0 };
   hitShake = 0;
   playing = false;
-  noteGlyph = noteTexture();
+  noteGlyph = noteTexture("♪");
+  footGlyph = noteTexture("脚");
   host: HTMLElement;
 
   constructor(host: HTMLElement) {
@@ -144,6 +146,7 @@ export class Stage {
     this.makeRig();
     this.rig.visible = false;
     this.pads = { L: this.makePad("L"), R: this.makePad("R") };
+    this.footPads = { L: this.makePad("L", "foot"), R: this.makePad("R", "foot") };
     this.makeRails();
     new ResizeObserver(() => this.resize()).observe(host);
     this.resize();
@@ -166,22 +169,24 @@ export class Stage {
     for (const side of ["L", "R"] as const) {
       const target = this.targets[side];
       this.pads[side].position.set(target.x, target.y, PAD_Z);
+      this.footPads[side].position.set(target.x, -1.8, PAD_Z);
     }
-    for (const { side, offset, line } of this.rails) {
+    for (const { side, limb, offset, line } of this.rails) {
       const target = this.targets[side];
+      const y = limb === "foot" ? -1.8 : target.y;
       const sign = side === "L" ? -1 : 1;
       const positions = line.geometry.getAttribute(
         "position",
       ) as THREE.BufferAttribute;
-      positions.setXYZ(0, target.x, target.y + offset, PAD_Z);
-      positions.setXYZ(1, sign * 2.3, target.y + offset + 0.2, -11);
+      positions.setXYZ(0, target.x, y + offset, PAD_Z);
+      positions.setXYZ(1, sign * 2.3, y + offset + 0.2, -11);
       positions.needsUpdate = true;
     }
   }
 
   private makeRails() {
     for (const side of ["L", "R"] as const) {
-      for (const offset of [-0.52, 0.52]) {
+      for (const limb of ["hand", "foot"] as const) for (const offset of [-0.52, 0.52]) {
         const line = new THREE.Line(
           new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(),
@@ -190,17 +195,17 @@ export class Stage {
           new THREE.LineBasicMaterial({
             color: side === "L" ? CYAN : PINK,
             transparent: true,
-            opacity: 0.25,
+            opacity: limb === "foot" ? 0.18 : 0.25,
             depthWrite: false,
           }),
         );
         this.scene.add(line);
-        this.rails.push({ side, offset, line });
+        this.rails.push({ side, limb, offset, line });
       }
     }
   }
 
-  makePad(side: "L" | "R") {
+  makePad(side: "L" | "R", limb: "hand" | "foot" = "hand") {
     const color = side === "L" ? CYAN : PINK;
     const group = new THREE.Group();
     const base = new THREE.Mesh(
@@ -229,7 +234,8 @@ export class Stage {
       );
       group.add(ring);
     }
-    group.position.set(this.targets[side].x, this.targets[side].y, PAD_Z);
+    if (limb === "foot") group.scale.setScalar(0.8);
+    group.position.set(this.targets[side].x, limb === "foot" ? -1.8 : this.targets[side].y, PAD_Z);
     this.scene.add(group);
     return group;
   }
@@ -395,7 +401,7 @@ export class Stage {
     const glyph = new THREE.Mesh(
       new THREE.PlaneGeometry(0.65, 0.65),
       new THREE.MeshBasicMaterial({
-        map: this.noteGlyph,
+        map: note.limb === "foot" ? this.footGlyph : this.noteGlyph,
         transparent: true,
         depthWrite: false,
       }),
@@ -407,13 +413,13 @@ export class Stage {
     return group;
   }
 
-  hit(side: "L" | "R", impact?: { x: number; y: number }, scored = true) {
+  hit(side: "L" | "R", impact?: { x: number; y: number }, scored = true, limb: "hand" | "foot" = "hand") {
     const x = scored
       ? this.targets[side].x
       : (impact?.x ?? this.targets[side].x);
     const y = scored
-      ? this.targets[side].y
-      : (impact?.y ?? this.targets[side].y);
+      ? limb === "foot" ? -1.8 : this.targets[side].y
+      : (impact?.y ?? (limb === "foot" ? -1.8 : this.targets[side].y));
     if (scored) {
       this.hitPulse[side] = 1;
       this.hitShake = 0.17;
@@ -508,17 +514,16 @@ export class Stage {
         0.09 + 0.035 * Math.sin(now * 2 + i);
     });
     for (const side of ["L", "R"] as const) {
-      const pad = this.pads[side];
-      const pulse = session
-        ? Math.max(
-            0,
-            ...session.notes
-              .filter((n) => n.side === side && n.state === "pending")
-              .map((n) => 1 - Math.abs(n.at - (now - session.startAt)) / 0.35),
-          )
-        : 0;
-      const size = 1 + pulse * 0.14;
-      pad.scale.setScalar(size + this.hitPulse[side] * 0.8);
+      for (const limb of ["hand", "foot"] as const) {
+        const pad = limb === "hand" ? this.pads[side] : this.footPads[side];
+        const pulse = session
+          ? Math.max(0, ...session.notes
+              .filter((n) => n.side === side && n.limb === limb && n.state === "pending")
+              .map((n) => 1 - Math.abs(n.at - (now - session.startAt)) / 0.35))
+          : 0;
+        const size = (limb === "foot" ? 0.8 : 1) + pulse * 0.14;
+        pad.scale.setScalar(size + this.hitPulse[side] * 0.4);
+      }
       this.hitPulse[side] = Math.max(0, this.hitPulse[side] - dt * 1.4);
     }
     const visible = new Set<string>();
@@ -535,11 +540,12 @@ export class Stage {
         visible.add(note.id);
         const group = this.notes.get(note.id) || this.makeNote(note);
         const target = this.targets[note.side as "L" | "R"];
+        const y = note.limb === "foot" ? -1.8 : target.y;
         const sign = note.side === "L" ? -1 : 1;
         const depth = Math.min(progress, 1);
         group.position.set(
           sign * 2.3 + (target.x - sign * 2.3) * depth,
-          target.y + (1 - depth) * 0.2,
+          y + (1 - depth) * 0.2,
           -11 + depth * (PAD_Z + 11),
         );
         group.scale.setScalar(0.8 + 0.2 * depth + 0.06 * Math.sin(now * 9));
