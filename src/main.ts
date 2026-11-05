@@ -1,6 +1,8 @@
 import "./style.css";
 import {
   BEAT,
+  BPM,
+  LATE_SPEEDUP,
   PunchDetector,
   PoseSmoother,
   RhythmSession,
@@ -40,6 +42,8 @@ const camContext = camCanvas.getContext("2d")!;
 const cameraButton = get<HTMLButtonElement>("cameraButton");
 const cameraSelect = get<HTMLSelectElement>("cameraSelect");
 const fpsSelect = get<HTMLSelectElement>("fpsSelect");
+const loopMode = get<HTMLInputElement>("loopMode");
+const tempoLabel = get<HTMLElement>("tempoLabel");
 const startButton = get<HTMLButtonElement>("startButton");
 const overlayStart = get<HTMLButtonElement>("overlayStart");
 const overlay = get<HTMLDivElement>("startOverlay");
@@ -56,9 +60,12 @@ let modelFailed = false;
 let lastCount = "";
 let resultShown = false;
 let detectedPunches = 0;
+let roundIndex = 0;
+let totalScore = 0;
 
-function status(message: string) {
+function status(message: string, error = false) {
   statusText.textContent = message;
+  statusText.parentElement?.classList.toggle("error", error);
 }
 
 const worker = new Worker("/pose-worker.js");
@@ -145,7 +152,7 @@ worker.onmessage = (event: MessageEvent) => {
     modelFailed = true;
     workerReady = false;
     trackingState.textContent = "姿态模型加载失败";
-    status(`姿态模型错误：${message.detail}。仍可使用 A / L 键试玩。`);
+    status(`姿态模型错误：${message.detail}。仍可使用 A / L 键试玩。`, true);
   }
 };
 worker.onerror = () => {
@@ -153,7 +160,7 @@ worker.onerror = () => {
   modelFailed = true;
   workerReady = false;
   trackingState.textContent = "追踪线程失败";
-  status("骨架追踪线程无法启动，仍可使用 A / L 键试玩。");
+  status("骨架追踪线程无法启动，仍可使用 A / L 键试玩。", true);
 };
 worker.postMessage({ type: "init" });
 
@@ -179,7 +186,7 @@ async function connectCamera() {
     return;
   }
   if (!navigator.mediaDevices?.getUserMedia) {
-    status("当前浏览器不支持摄像头，请使用 localhost 或 HTTPS 打开。");
+    status("当前浏览器不支持摄像头，请使用 localhost 或 HTTPS 打开。", true);
     return;
   }
   cameraButton.disabled = true;
@@ -228,6 +235,7 @@ async function connectCamera() {
       modelFailed
         ? "摄像头已连接，但姿态模型不可用。请刷新重试。"
         : "摄像头已连接，请让上半身进入画面。",
+      modelFailed,
     );
     await listCameras();
   } catch (error) {
@@ -235,7 +243,7 @@ async function connectCamera() {
     stream = null;
     const reason = error instanceof Error ? error.message : String(error);
     trackingState.textContent = "摄像头不可用";
-    status(`无法打开摄像头：${reason}。可先用 A / L 键练习。`);
+    status(`无法打开摄像头：${reason}。可先用 A / L 键练习。`, true);
   } finally {
     cameraButton.disabled = false;
   }
@@ -311,16 +319,14 @@ function attempt(
   if (!session || session.finished) return false;
   const result = session.attempt(side, at);
   if (!result) return false;
+  totalScore += result.points;
   stage.hit(side, impact);
   audio.hit(result.grade);
   showFeedback(
     `${result.grade}  +${result.points}`,
     result.grade === "GOOD" ? "good" : "",
   );
-  get<HTMLElement>("score").textContent = String(session.score).padStart(
-    5,
-    "0",
-  );
+  get<HTMLElement>("score").textContent = String(totalScore).padStart(5, "0");
   get<HTMLElement>("combo").innerHTML = `${session.combo}<span>×</span>`;
   get<HTMLElement>("accuracy").innerHTML = `${session.accuracy}<span>%</span>`;
   return true;
@@ -331,14 +337,11 @@ async function startGame() {
   try {
     await audio.ready();
   } catch {
-    status("音频不可用；画面与键盘操作仍可继续。");
+    status("音频不可用；画面与键盘操作仍可继续。", true);
   }
-  const startAt = performance.now() / 1000 + 3 * BEAT;
-  session = new RhythmSession(startAt);
-  detectedPunches = 0;
-  resultShown = false;
-  lastCount = "";
-  if (audio.context) audio.schedule(audio.now() + 3 * BEAT);
+  totalScore = 0;
+  roundIndex = 0;
+  beginRound();
   overlay.classList.add("hidden");
   startButton.disabled = true;
   startButton.style.opacity = ".55";
@@ -352,8 +355,25 @@ async function startGame() {
   );
 }
 
+function beginRound() {
+  const speed = Math.min(1 + roundIndex * 0.06, 1.3);
+  const countBeat = BEAT / speed;
+  const startAt = performance.now() / 1000 + 3 * countBeat;
+  session = new RhythmSession(startAt, speed);
+  detectedPunches = 0;
+  resultShown = false;
+  lastCount = "";
+  if (audio.context) audio.schedule(audio.now() + 3 * countBeat, speed);
+  tempoLabel.textContent = `${Math.round(BPM * speed)}→${Math.round(BPM * speed * LATE_SPEEDUP)} BPM · ${loopMode.checked ? `第 ${roundIndex + 1} 轮` : `约 ${Math.round(session.duration)} 秒`}`;
+}
+
 function finishGame() {
   if (!session || resultShown) return;
+  if (loopMode.checked) {
+    roundIndex++;
+    beginRound();
+    return;
+  }
   resultShown = true;
   startButton.disabled = false;
   startButton.style.opacity = "1";
@@ -362,7 +382,7 @@ function finishGame() {
     : "再试一次，找到节拍。";
   const punchSummary = stream ? ` · 识别挥拳 ${detectedPunches} 次` : "";
   get<HTMLElement>("overlayText").textContent =
-    `得分 ${session.score} · 命中 ${session.hits}/${session.notes.length}${punchSummary} · 最佳连击 ${session.bestCombo}。`;
+    `得分 ${totalScore} · 命中 ${session.hits}/${session.notes.length}${punchSummary} · 最佳连击 ${session.bestCombo}。`;
   overlay.querySelector(".eyebrow")!.textContent = "TRACK COMPLETE";
   overlay.querySelector("small")!.textContent =
     "提示：没有摄像头也能用 A / L 键击打音符";
@@ -396,10 +416,11 @@ function loop() {
   if (session) {
     session.tick(now, stream && workerReady ? 0.18 : 0);
     const remaining = session.startAt - now;
+    const countBeat = BEAT / session.speed;
     const count =
       remaining > 0
-        ? String(Math.ceil(remaining / BEAT))
-        : remaining > -BEAT * 0.5
+        ? String(Math.ceil(remaining / countBeat))
+        : remaining > -countBeat * 0.5
           ? "GO!"
           : "";
     if (count !== lastCount) {
@@ -462,4 +483,6 @@ window.addEventListener("beforeunload", () => {
   stream?.getTracks().forEach((track) => track.stop());
   worker.terminate();
 });
-listCameras().catch(() => {});
+void listCameras()
+  .catch(() => {})
+  .then(connectCamera);

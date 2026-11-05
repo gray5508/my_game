@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  BEAT,
+  CHART_BEATS,
+  beatTime,
   makeChart,
   RhythmSession,
   PoseSmoother,
@@ -10,15 +11,28 @@ import {
   relativeWrist,
 } from "../src/logic.js";
 
-test("chart stays inside the 32 beat song", () => {
+test("chart stays inside the longer song", () => {
   const chart = makeChart();
-  assert.equal(chart.length, 16);
-  assert.ok(chart.every((note) => note.at >= 0 && note.at < 32 * BEAT));
+  assert.equal(CHART_BEATS, 64);
+  assert.equal(chart.length, 32);
+  assert.ok(
+    chart.every((note) => note.at >= 0 && note.at < beatTime(CHART_BEATS)),
+  );
   assert.deepEqual(
     chart.slice(0, 4).map((note) => note.side),
     ["L", "L", "R", "R"],
   );
   assert.ok(chart[1].at - chart[0].at > 1);
+});
+
+test("later beats and repeat rounds become faster", () => {
+  assert.ok(beatTime(48) - beatTime(32) < beatTime(16));
+  assert.ok(
+    new RhythmSession(0, 1.06).duration < new RhythmSession(0, 1).duration,
+  );
+  const song = new RhythmSession(5);
+  song.tick(5 + song.duration + 0.81);
+  assert.equal(song.finished, true);
 });
 
 test("punch scores only the matching note once, miss breaks combo", () => {

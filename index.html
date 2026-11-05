@@ -37,7 +37,8 @@
             <div class="track-label">
               <span>♪</span>
               <div>
-                <strong>霓虹脉冲</strong><small>108 BPM · 约 18 秒</small>
+                <strong>霓虹脉冲</strong
+                ><small id="tempoLabel">108→121 BPM · 约 34 秒</small>
               </div>
             </div>
           </div>
@@ -115,8 +116,8 @@
             <label for="fpsSelect">追踪帧率 <span>TRACKING FPS</span></label
             ><select id="fpsSelect">
               <option value="15">15 FPS · 省电</option>
-              <option value="24" selected>24 FPS · 标准</option>
-              <option value="30">30 FPS · 流畅</option>
+              <option value="24">24 FPS · 标准</option>
+              <option value="30" selected>30 FPS · 流畅</option>
             </select>
           </div>
           <div class="control-group range-group">
@@ -131,6 +132,11 @@
               value="45"
             />
             <div class="range-ends"><span>轻拳</span><span>重拳</span></div>
+          </div>
+          <div class="control-group">
+            <label for="loopMode" class="loop-control"
+              >循环模式 <input id="loopMode" type="checkbox" />
+            </label>
           </div>
           <div class="separator"></div>
           <button class="camera-button" id="cameraButton">

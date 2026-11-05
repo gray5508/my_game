@@ -516,7 +516,7 @@ kbd {
 }
 .panel {
   align-self: start;
-  min-height: 744px;
+  min-height: 0;
   border: 1px solid #293d57;
   background: linear-gradient(150deg, #16233a, #101b2e 54%, #10192a);
   border-radius: 14px;
@@ -530,6 +530,25 @@ kbd {
   align-items: center;
   font-size: 21px;
   letter-spacing: -0.5px;
+}
+.arena-heading p,
+.arena-topline,
+.lane-label,
+.score-pop,
+.arena-bottomline,
+.hint-strip,
+.stats .stat:not(.large),
+.panel-heading p,
+.panel .panel-note,
+.start-overlay .overlay-icon,
+.start-overlay .eyebrow,
+.start-overlay h2,
+.start-overlay p,
+.start-overlay small {
+  display: none;
+}
+.panel-note.error {
+  display: flex;
 }
 .panel-heading h2 span {
   font-size: 14px;
@@ -606,6 +625,12 @@ kbd {
     monospace;
   letter-spacing: 0.6px;
   color: #7e9aaf;
+}
+.loop-control input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #6ef4e5;
 }
 select {
   height: 36px;

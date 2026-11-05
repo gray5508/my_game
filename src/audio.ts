@@ -1,4 +1,4 @@
-import { BEAT, makeChart } from "./logic.js";
+import { BEAT, CHART_BEATS, beatTime, makeChart } from "./logic.js";
 
 export class SongAudio {
   context: AudioContext | null = null;
@@ -74,17 +74,18 @@ export class SongAudio {
     source.stop(at + duration);
   }
 
-  schedule(startAt: number) {
+  schedule(startAt: number, speed = 1) {
     const melody = [329.63, 392, 440, 523.25, 493.88, 440, 392, 329.63];
+    const countBeat = BEAT / speed;
     for (let i = 0; i < 4; i++)
       this.tone(
         i === 3 ? 880 : 660,
-        startAt - (3 - i) * BEAT,
+        startAt - (3 - i) * countBeat,
         0.09,
         i === 3 ? 0.15 : 0.09,
       );
-    for (let beat = 0; beat < 32; beat++) {
-      const at = startAt + beat * BEAT;
+    for (let beat = 0; beat < CHART_BEATS; beat++) {
+      const at = startAt + beatTime(beat, speed);
       if (beat % 4 === 0 || beat % 4 === 2) {
         this.tone(150, at, 0.24, 0.36, "sine", 45);
       }
@@ -93,19 +94,23 @@ export class SongAudio {
         this.tone(185, at, 0.08, 0.055, "triangle");
       }
       this.hiss(at, 0.065, 0.055);
-      this.hiss(at + BEAT / 2, 0.04, 0.04);
+      this.hiss(
+        at + beatTime(beat + 0.5, speed) - beatTime(beat, speed),
+        0.04,
+        0.04,
+      );
       if (beat % 4 === 0)
         this.tone(
           [110, 130.81, 146.83, 130.81][Math.floor(beat / 4) % 4],
           at,
-          BEAT * 1.5,
+          beatTime(beat + 1.5, speed) - beatTime(beat, speed),
           0.13,
           "triangle",
         );
     }
-    for (const note of makeChart()) {
+    for (const note of makeChart(speed)) {
       const pitch =
-        melody[Math.floor(note.at / BEAT / 4) % melody.length] *
+        melody[Number(note.id.split("-")[0]) % melody.length] *
         (note.side === "R" ? 1.25 : 1);
       this.tone(pitch, startAt + note.at, 0.16, 0.055, "triangle");
     }

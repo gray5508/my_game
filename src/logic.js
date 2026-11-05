@@ -3,6 +3,7 @@ export const BEAT = 60 / BPM;
 export const TRAVEL = 1.25;
 export const WINDOW = 0.27;
 export const HIT_Y = -0.05;
+export const LATE_SPEEDUP = 1.12;
 
 const bars = [
   "L...L...",
@@ -13,9 +14,25 @@ const bars = [
   "R...R...",
   "L...L...",
   "R...R...",
+  "L...L...",
+  "R...R...",
+  "L...L...",
+  "R...R...",
+  "L...L...",
+  "R...R...",
+  "L...L...",
+  "R...R...",
 ];
 
-export function makeChart() {
+export const CHART_BEATS = bars.length * 4;
+
+export function beatTime(beat, speed = 1) {
+  const firstHalf = Math.min(beat, CHART_BEATS / 2);
+  const secondHalf = Math.max(0, beat - CHART_BEATS / 2);
+  return ((firstHalf + secondHalf / LATE_SPEEDUP) * BEAT) / speed;
+}
+
+export function makeChart(speed = 1) {
   return bars.flatMap((bar, barIndex) =>
     [...bar].flatMap((side, slot) =>
       side === "."
@@ -24,7 +41,7 @@ export function makeChart() {
             {
               id: `${barIndex}-${slot}`,
               side,
-              at: (barIndex * 4 + slot / 2) * BEAT,
+              at: beatTime(barIndex * 4 + slot / 2, speed),
               state: "pending",
             },
           ],
@@ -33,9 +50,10 @@ export function makeChart() {
 }
 
 export class RhythmSession {
-  constructor(startAt = 0) {
+  constructor(startAt = 0, speed = 1) {
     this.startAt = startAt;
-    this.notes = makeChart();
+    this.speed = speed;
+    this.notes = makeChart(speed);
     this.score = 0;
     this.combo = 0;
     this.bestCombo = 0;
@@ -45,7 +63,7 @@ export class RhythmSession {
   }
 
   get duration() {
-    return 32 * BEAT;
+    return beatTime(CHART_BEATS, this.speed);
   }
   get accuracy() {
     return this.hits + this.misses
