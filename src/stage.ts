@@ -49,8 +49,16 @@ export class Stage {
     velocity: THREE.Vector3;
     life: number;
     duration: number;
+    radius: number;
   }[] = [];
-  shockwaves: { mesh: THREE.Mesh; life: number; duration: number }[] = [];
+  shockwaves: {
+    mesh: THREE.Mesh;
+    life: number;
+    duration: number;
+    radius: number;
+  }[] = [];
+  particleGeometry = new THREE.IcosahedronGeometry(1, 0);
+  waveGeometry = new THREE.TorusGeometry(1, 0.12, 10, 64);
   pads: { L: THREE.Group; R: THREE.Group };
   rails: { side: "L" | "R"; offset: number; line: THREE.Line }[] = [];
   rings: THREE.Mesh[] = [];
@@ -422,7 +430,7 @@ export class Stage {
         [1.2, side === "L" ? CYAN : PINK, 0.98],
       ]) {
         const mesh = new THREE.Mesh(
-          new THREE.TorusGeometry(radius, 0.11, 10, 64),
+          this.waveGeometry,
           new THREE.MeshBasicMaterial({
             color,
             transparent: true,
@@ -432,18 +440,19 @@ export class Stage {
           }),
         );
         mesh.position.set(x, y, PAD_Z + 0.12);
+        mesh.scale.setScalar(radius * 0.7);
         this.scene.add(mesh);
-        this.shockwaves.push({ mesh, life: duration, duration });
+        this.shockwaves.push({ mesh, life: duration, duration, radius });
       }
     }
     const color = scored ? (side === "L" ? CYAN : PINK) : 0x8fa3c7;
     const duration = scored ? 1.2 : 0.45;
-    for (let i = 0; i < (scored ? 46 : 7); i++) {
+    for (let i = 0; i < (scored ? 26 : 7); i++) {
+      const radius = scored
+        ? 0.1 + Math.random() * 0.16
+        : 0.045 + Math.random() * 0.05;
       const mesh = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(
-          scored ? 0.085 + Math.random() * 0.13 : 0.045 + Math.random() * 0.05,
-          0,
-        ),
+        this.particleGeometry,
         new THREE.MeshBasicMaterial({
           color,
           transparent: true,
@@ -452,6 +461,7 @@ export class Stage {
         }),
       );
       mesh.position.set(x, y, scored ? PAD_Z : 0);
+      mesh.scale.setScalar(radius);
       this.scene.add(mesh);
       const angle = Math.random() * Math.PI * 2;
       const speed = scored ? 5 + Math.random() * 3 : 2 + Math.random() * 2;
@@ -464,6 +474,7 @@ export class Stage {
         ),
         life: duration,
         duration,
+        radius,
       });
     }
   }
@@ -565,10 +576,9 @@ export class Stage {
         0,
         p.life / p.duration,
       );
-      p.mesh.scale.setScalar(Math.max(0.01, p.life / p.duration));
+      p.mesh.scale.setScalar(p.radius * Math.max(0.01, p.life / p.duration));
       if (p.life <= 0) {
         this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
         (p.mesh.material as THREE.Material).dispose();
         return false;
       }
@@ -577,12 +587,11 @@ export class Stage {
     this.shockwaves = this.shockwaves.filter((wave) => {
       wave.life -= dt;
       const progress = 1 - wave.life / wave.duration;
-      wave.mesh.scale.setScalar(0.7 + progress * 3.1);
+      wave.mesh.scale.setScalar(wave.radius * (0.7 + progress * 3.1));
       (wave.mesh.material as THREE.MeshBasicMaterial).opacity =
         Math.max(0, wave.life / wave.duration) * 0.9;
       if (wave.life <= 0) {
         this.scene.remove(wave.mesh);
-        wave.mesh.geometry.dispose();
         (wave.mesh.material as THREE.Material).dispose();
         return false;
       }

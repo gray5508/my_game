@@ -37,7 +37,7 @@ Node.js 版本须满足 Vite 8：20.19+ 或 22.12+。在浏览器打开终端显
 - 音色：`src/audio.ts` 的 `schedule()`；合成原创鼓点、低音与旋律，并使用同一 `beatTime()` 跟随加速。
 - 出拳阈值：`src/logic.js` 的 `PunchDetector`；界面灵敏度滑杆修改速度阈值。左右映射由 MediaPipe 手腕编号 15/16 决定。
 - 光圈与视角：`src/stage.ts` 的 `PAD_Z`、`targets`、`resize()`。光圈处于负 Z 位置；音符从更远处沿轨道向光圈移动。虚拟相机独立于骨架世界坐标。
-- 特效与可选角色：`src/stage.ts` 的 `makeNote()`、`hit()`；命中时有双层冲击波、放大的粒子、短暂镜头震动和约 1.2 秒的余韵，音效在 `src/audio.ts` 的 `hit()`。循环模式下音符、粒子和冲击波过期后会释放 GPU 资源。`makeRig()` 的角色网格保留供以后玩法使用，当前 `rig.visible = false`。
+- 特效与可选角色：`src/stage.ts` 的 `makeNote()`、`hit()`；命中时有双层冲击波、放大的粒子、短暂镜头震动和约 1.2 秒的余韵，音效在 `src/audio.ts` 的 `hit()`。命中音先触发；粒子和冲击波复用几何体，临时材质在结束后释放，避免命中瞬间卡顿。`makeRig()` 的角色网格保留供以后玩法使用，当前 `rig.visible = false`。
 - 摄像头性能：`src/main.ts` 的采集节流、Worker 往返；优先检查实际摄像头 FPS 和推理耗时，再增加复杂特效。
 
 ## 验证与已知边界

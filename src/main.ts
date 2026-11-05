@@ -49,7 +49,6 @@ const overlayStart = get<HTMLButtonElement>("overlayStart");
 const overlay = get<HTMLDivElement>("startOverlay");
 const statusText = get<HTMLParagraphElement>("statusText");
 const trackingState = get<HTMLSpanElement>("trackingState");
-const scorePop = get<HTMLDivElement>("scorePop");
 const countdown = get<HTMLDivElement>("countdown");
 let stream: MediaStream | null = null;
 let session: RhythmSession | null = null;
@@ -140,7 +139,6 @@ worker.onmessage = (event: MessageEvent) => {
         detectedPunches++;
         if (!attempt(hit.side as Side, hit, at)) {
           stage.hit(hit.side as Side, hit, false);
-          showFeedback("挥拳已识别 · 等待节拍", "soft");
         }
         status(
           `已识别 ${detectedPunches} 次挥拳 · 命中 ${session.hits}/${session.notes.length}`,
@@ -304,13 +302,6 @@ function drawSkeleton(points: Landmark[] | null) {
   }
 }
 
-function showFeedback(message: string, tone = "") {
-  scorePop.textContent = message;
-  scorePop.className = `score-pop ${tone}`;
-  void scorePop.offsetWidth;
-  scorePop.classList.add("show");
-}
-
 function attempt(
   side: Side,
   impact?: { x: number; y: number },
@@ -320,12 +311,8 @@ function attempt(
   const result = session.attempt(side, at);
   if (!result) return false;
   totalScore += result.points;
-  stage.hit(side, impact);
   audio.hit(result.grade);
-  showFeedback(
-    `${result.grade}  +${result.points}`,
-    result.grade === "GOOD" ? "good" : "",
-  );
+  stage.hit(side, impact);
   get<HTMLElement>("score").textContent = String(totalScore).padStart(5, "0");
   get<HTMLElement>("combo").innerHTML = `${session.combo}<span>×</span>`;
   get<HTMLElement>("accuracy").innerHTML = `${session.accuracy}<span>%</span>`;
